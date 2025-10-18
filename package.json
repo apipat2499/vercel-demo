@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.67.0",
     "@types/cheerio": "^0.22.35",
     "cheerio": "^1.1.2",
     "framer-motion": "^12.23.24",

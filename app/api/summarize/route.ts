@@ -1,20 +1,20 @@
 import { NextResponse } from "next/server";
 import * as cheerio from 'cheerio';
-import OpenAI from 'openai';
+import Anthropic from '@anthropic-ai/sdk';
 
-// Lazy initialize OpenAI only when needed (to avoid build errors)
-let openai: OpenAI | null = null;
+// Lazy initialize Claude only when needed (to avoid build errors)
+let claude: Anthropic | null = null;
 
-function getOpenAIClient(): OpenAI {
-  if (!openai && process.env.OPENAI_API_KEY) {
-    openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+function getClaudeClient(): Anthropic {
+  if (!claude && process.env.ANTHROPIC_API_KEY) {
+    claude = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
   }
-  if (!openai) {
-    throw new Error('OpenAI API key not configured');
+  if (!claude) {
+    throw new Error('Claude API key not configured');
   }
-  return openai;
+  return claude;
 }
 
 // ฟังก์ชันตรวจสอบภาษา
@@ -23,7 +23,7 @@ function detectLanguage(text: string): 'thai' | 'english' {
   return thaiPattern.test(text) ? 'thai' : 'english';
 }
 
-// ฟังก์ชันสรุปด้วย AI
+// ฟังก์ชันสรุปด้วย Claude AI
 async function aiSummary(content: string, language: 'thai' | 'english'): Promise<string> {
   try {
     // ทำความสะอาดข้อความ
@@ -31,35 +31,37 @@ async function aiSummary(content: string, language: 'thai' | 'english'): Promise
       .replace(/<[^>]*>/g, '')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 8000); // จำกัดความยาวเพื่อประหยัด tokens
+      .substring(0, 15000); // Claude รองรับข้อความยาวกว่า
 
-    const prompt = language === 'thai'
-      ? `สรุปข่าวต่อไปนี้เป็นภาษาไทยให้กระชับและเข้าใจง่าย ประมาณ 3-4 ประโยค โดยเน้นประเด็นสำคัญ:\n\n${cleanText}`
-      : `Summarize the following news article concisely in 3-4 sentences, focusing on key points:\n\n${cleanText}`;
+    const systemPrompt = language === 'thai'
+      ? "คุณเป็นผู้ช่วยสรุปข่าวที่เชี่ยวชาญในการสรุปข่าวภาษาไทยให้กระชับและเข้าใจง่าย สรุปเป็น 3-4 ประโยค เน้นประเด็นสำคัญ"
+      : "You are a professional news summarizer. Summarize concisely in 3-4 sentences, focusing on key points.";
 
-    const client = getOpenAIClient();
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+    const userPrompt = language === 'thai'
+      ? `กรุณาสรุปข่าวต่อไปนี้:\n\n${cleanText}`
+      : `Please summarize this news article:\n\n${cleanText}`;
+
+    const client = getClaudeClient();
+    const message = await client.messages.create({
+      model: "claude-3-5-haiku-20241022", // ใช้ Haiku (ถูกและเร็ว)
+      max_tokens: 500,
+      temperature: 0.5,
+      system: systemPrompt,
       messages: [
         {
-          role: "system",
-          content: language === 'thai'
-            ? "คุณเป็นผู้ช่วยสรุปข่าวที่เชี่ยวชาญในการสรุปข่าวภาษาไทยให้กระชับและเข้าใจง่าย"
-            : "You are a professional news summarizer who creates concise and clear summaries."
-        },
-        {
           role: "user",
-          content: prompt
+          content: userPrompt
         }
-      ],
-      temperature: 0.5,
-      max_tokens: 300,
+      ]
     });
 
-    return completion.choices[0]?.message?.content?.trim() ||
-           (language === 'thai' ? 'ไม่สามารถสรุปข่าวได้' : 'Cannot summarize');
+    const summary = message.content[0]?.type === 'text'
+      ? message.content[0].text.trim()
+      : '';
+
+    return summary || (language === 'thai' ? 'ไม่สามารถสรุปข่าวได้' : 'Cannot summarize');
   } catch (error) {
-    console.error('AI Summary Error:', error);
+    console.error('Claude AI Summary Error:', error);
     // Fallback to simple summary
     return simpleSummary(content, language);
   }
