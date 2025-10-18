@@ -2,10 +2,20 @@ import { NextResponse } from "next/server";
 import * as cheerio from 'cheerio';
 import OpenAI from 'openai';
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Lazy initialize OpenAI only when needed (to avoid build errors)
+let openai: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openai && process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  if (!openai) {
+    throw new Error('OpenAI API key not configured');
+  }
+  return openai;
+}
 
 // ฟังก์ชันตรวจสอบภาษา
 function detectLanguage(text: string): 'thai' | 'english' {
@@ -27,7 +37,8 @@ async function aiSummary(content: string, language: 'thai' | 'english'): Promise
       ? `สรุปข่าวต่อไปนี้เป็นภาษาไทยให้กระชับและเข้าใจง่าย ประมาณ 3-4 ประโยค โดยเน้นประเด็นสำคัญ:\n\n${cleanText}`
       : `Summarize the following news article concisely in 3-4 sentences, focusing on key points:\n\n${cleanText}`;
 
-    const completion = await openai.chat.completions.create({
+    const client = getOpenAIClient();
+    const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
