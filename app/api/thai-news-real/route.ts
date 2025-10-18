@@ -138,7 +138,7 @@ async function fetchRealNews(source: any, limit: number = 10) {
         }
       }
 
-      // 6. ใช้ placeholder ที่สวยงามถ้าไม่มีรูป
+      // 6. ใช้ placeholder ที่สวยงามถ้าไม่มีรูป (ใช้ hash จาก title เพื่อความหลากหลาย)
       if (!imageUrl) {
         const placeholders = [
           'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&h=400&fit=crop&q=80', // News
@@ -146,8 +146,15 @@ async function fetchRealNews(source: any, limit: number = 10) {
           'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&h=400&fit=crop&q=80', // Thailand
           'https://images.unsplash.com/photo-1523995462485-3d171b5c8fa9?w=800&h=400&fit=crop&q=80', // Media
           'https://images.unsplash.com/photo-1586339949916-3e9457bef6d3?w=800&h=400&fit=crop&q=80', // Technology
+          'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=800&h=400&fit=crop&q=80', // Office
+          'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&h=400&fit=crop&q=80', // Team
+          'https://images.unsplash.com/photo-1557804506-669a67965ba0?w=800&h=400&fit=crop&q=80', // People
         ];
-        imageUrl = placeholders[i % placeholders.length];
+        // สุ่มรูปตาม hash ของ title เพื่อให้แต่ละข่าวได้รูปไม่ซ้ำกัน
+        const hash = title.split('').reduce((acc, char) => {
+          return char.charCodeAt(0) + ((acc << 5) - acc);
+        }, 0);
+        imageUrl = placeholders[Math.abs(hash) % placeholders.length];
       }
       
       if (title && link) {
