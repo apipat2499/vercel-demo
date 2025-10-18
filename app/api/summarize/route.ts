@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import * as cheerio from 'cheerio';
+import OpenAI from 'openai';
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // ฟังก์ชันตรวจสอบภาษา
 function detectLanguage(text: string): 'thai' | 'english' {
@@ -7,30 +13,67 @@ function detectLanguage(text: string): 'thai' | 'english' {
   return thaiPattern.test(text) ? 'thai' : 'english';
 }
 
-// ฟังก์ชันสรุปแบบง่าย
+// ฟังก์ชันสรุปด้วย AI
+async function aiSummary(content: string, language: 'thai' | 'english'): Promise<string> {
+  try {
+    // ทำความสะอาดข้อความ
+    const cleanText = content
+      .replace(/<[^>]*>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 8000); // จำกัดความยาวเพื่อประหยัด tokens
+
+    const prompt = language === 'thai'
+      ? `สรุปข่าวต่อไปนี้เป็นภาษาไทยให้กระชับและเข้าใจง่าย ประมาณ 3-4 ประโยค โดยเน้นประเด็นสำคัญ:\n\n${cleanText}`
+      : `Summarize the following news article concisely in 3-4 sentences, focusing on key points:\n\n${cleanText}`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: language === 'thai'
+            ? "คุณเป็นผู้ช่วยสรุปข่าวที่เชี่ยวชาญในการสรุปข่าวภาษาไทยให้กระชับและเข้าใจง่าย"
+            : "You are a professional news summarizer who creates concise and clear summaries."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.5,
+      max_tokens: 300,
+    });
+
+    return completion.choices[0]?.message?.content?.trim() ||
+           (language === 'thai' ? 'ไม่สามารถสรุปข่าวได้' : 'Cannot summarize');
+  } catch (error) {
+    console.error('AI Summary Error:', error);
+    // Fallback to simple summary
+    return simpleSummary(content, language);
+  }
+}
+
+// ฟังก์ชันสรุปแบบง่าย (สำหรับ fallback)
 function simpleSummary(content: string, language: 'thai' | 'english'): string {
-  // ทำความสะอาดข้อความ
   const cleanText = content
-    .replace(/<[^>]*>/g, '') // ลบ HTML tags
-    .replace(/\s+/g, ' ') // ลบ whitespace เกิน
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
     .trim();
 
-  // แบ่งเป็นประโยค
   const sentences = cleanText.split(/[.!?।|]+/).filter(s => s.trim().length > 10);
-  
+
   if (sentences.length === 0) {
     return language === 'thai' ? 'ไม่สามารถสรุปเนื้อหาได้' : 'Cannot summarize content';
   }
 
-  // เลือกประโยคแรกๆ เป็นสรุป
   const summaryLength = Math.min(3, Math.ceil(sentences.length * 0.3));
   const selectedSentences = sentences.slice(0, summaryLength);
-  
+
   const summary = selectedSentences.join('. ').trim();
-  
-  // จำกัดความยาว
+
   const maxLength = language === 'thai' ? 400 : 300;
-  return summary.length > maxLength 
+  return summary.length > maxLength
     ? summary.substring(0, maxLength) + '...'
     : summary;
 }
@@ -38,81 +81,104 @@ function simpleSummary(content: string, language: 'thai' | 'english'): string {
 // ฟังก์ชันดึงเนื้อหาจาก URL
 async function fetchContentFromUrl(url: string) {
   try {
-    // ลองใช้ thai-news-real API ก่อน
-    try {
-      const response = await fetch('/api/thai-news-real', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ url }),
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        if (data.article?.content) {
-          return data.article.content;
-        }
-      }
-    } catch (error) {
-      console.log('Real Thai API failed, trying direct fetch');
-    }
-    
-    // ลองใช้ mock thai content
+    console.log('📥 Fetching content from:', url);
+
+    // ลองใช้ mock thai content ก่อน
     const mockContent = getMockThaiContent(url);
     if (mockContent) {
+      console.log('✓ Using mock Thai content');
       return mockContent;
     }
-    
-    // Fallback: ใช้ allorigins สำหรับ bypass CORS
+
+    // ลองใช้ allorigins สำหรับ bypass CORS
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    
-    const response = await fetch(proxyUrl);
-    
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 วินาที
+
+    const response = await fetch(proxyUrl, {
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
       throw new Error(`Failed to fetch content: ${response.status}`);
     }
-    
+
     const data = await response.json();
     const html = data.contents || '';
-    
+
+    if (!html) {
+      throw new Error('No HTML content received');
+    }
+
     // ใช้ cheerio แยก content จาก HTML
     const $ = cheerio.load(html);
-    
+
     // ลบ elements ที่ไม่ต้องการ
-    $('script, style, nav, header, footer, aside, .advertisement, .ads, .sidebar').remove();
-    
+    $('script, style, nav, header, footer, aside, iframe, .advertisement, .ads, .sidebar, .social-share, .comments').remove();
+
     // ดึง content จาก tags ที่มีเนื้อหาหลัก
     let content = '';
-    
-    // ลองดึงจาก article tag ก่อน
+
+    // วิธีที่ 1: ลองดึงจาก article tag
     if ($('article').length > 0) {
-      content = $('article').text();
+      const articleText = $('article p').map((i, el) => $(el).text()).get().join(' ');
+      if (articleText.length > 200) {
+        content = articleText;
+      }
     }
-    // ถ้าไม่มี ลองดึงจาก main tag
-    else if ($('main').length > 0) {
-      content = $('main').text();
+
+    // วิธีที่ 2: ลองดึงจาก main tag
+    if (!content && $('main').length > 0) {
+      const mainText = $('main p').map((i, el) => $(el).text()).get().join(' ');
+      if (mainText.length > 200) {
+        content = mainText;
+      }
     }
-    // ถ้าไม่มี ลองดึงจาก div ที่มี content class
-    else if ($('.content, .article-content, .post-content, .entry-content').length > 0) {
-      content = $('.content, .article-content, .post-content, .entry-content').first().text();
+
+    // วิธีที่ 3: ลองดึงจาก content classes
+    if (!content) {
+      const contentText = $('.content, .article-content, .post-content, .entry-content, .story-body')
+        .find('p')
+        .map((i, el) => $(el).text())
+        .get()
+        .join(' ');
+      if (contentText.length > 200) {
+        content = contentText;
+      }
     }
-    // สุดท้ายให้ดึงจาก body แต่กรอง paragraph ที่มีเนื้อหายาว
-    else {
-      const paragraphs = $('p').filter((i, el) => $(el).text().length > 50);
-      content = paragraphs.map((i, el) => $(el).text()).get().join(' ');
+
+    // วิธีที่ 4: ดึงจาก paragraph ทั้งหมดที่มีเนื้อหายาวพอ
+    if (!content) {
+      const paragraphs = $('p')
+        .filter((i, el) => {
+          const text = $(el).text();
+          return text.length > 50 && !text.includes('©') && !text.includes('Cookie');
+        })
+        .map((i, el) => $(el).text())
+        .get()
+        .slice(0, 10); // เอาแค่ 10 paragraph แรก
+
+      content = paragraphs.join(' ');
     }
-    
+
     // ทำความสะอาด content
     content = content
-      .replace(/\s+/g, ' ')  // ลบ whitespace เกิน
-      .replace(/\n+/g, ' ')  // แปลง newline เป็น space
+      .replace(/\s+/g, ' ') // ลบ whitespace เกิน
+      .replace(/\n+/g, ' ') // แปลง newline เป็น space
+      .replace(/\[.*?\]/g, '') // ลบ brackets
       .trim();
-    
+
+    if (content.length < 100) {
+      throw new Error('Content too short');
+    }
+
+    console.log(`✓ Fetched ${content.length} characters`);
     return content;
-    
-  } catch (error) {
-    console.error('Error fetching content from URL:', error);
+  } catch (error: any) {
+    console.error('❌ Error fetching content:', error.message);
     return null;
   }
 }
@@ -142,12 +208,14 @@ export async function POST(req: Request) {
     let content = "";
     let url = "";
     let language = "";
-    
+    let description = "";
+
     try {
       const body = await req.json();
       content = body?.content || "";
       url = body?.url || "";
       language = body?.language || "";
+      description = body?.description || ""; // เพิ่มการรับ description
     } catch {
       return NextResponse.json(
         { error: "Invalid JSON body" },
@@ -158,36 +226,36 @@ export async function POST(req: Request) {
     // ถ้ามี URL ให้ดึงเนื้อหาจาก URL
     if (url && !content) {
       const fetchedContent = await fetchContentFromUrl(url);
-      if (!fetchedContent) {
-        return NextResponse.json(
-          { error: "Could not fetch content from URL" },
-          { status: 400 }
-        );
+      if (fetchedContent) {
+        content = fetchedContent;
+      } else if (description) {
+        // ถ้าดึงไม่ได้ ใช้ description แทน
+        console.log('⚠️ Using description as fallback');
+        content = description;
       }
-      content = fetchedContent;
     }
 
     if (!content || content.trim().length === 0) {
       return NextResponse.json(
-        { error: "Missing or empty 'content' field or URL" },
+        { error: "Could not fetch content. Please try again or the article may not be accessible." },
         { status: 400 }
       );
     }
 
     // ตรวจสอบภาษาอัตโนมัติถ้าไม่ได้ระบุ
-    const detectedLang: 'thai' | 'english' = language === 'thai' || language === 'english' 
-      ? language 
+    const detectedLang: 'thai' | 'english' = language === 'thai' || language === 'english'
+      ? language
       : detectLanguage(content);
-    
-    // ใช้การสรุปแบบง่าย
-    const summary = simpleSummary(content, detectedLang);
 
-    return NextResponse.json({ 
+    // ใช้ AI สรุปข่าว
+    const summary = await aiSummary(content, detectedLang);
+
+    return NextResponse.json({
       summary,
       language: detectedLang,
       originalLength: content.length,
       summaryLength: summary.length,
-      method: 'simple_extraction' // บอกว่าใช้วิธีสรุปแบบง่าย
+      method: 'ai_summary' // บอกว่าใช้ AI สรุป
     });
   } catch (error: any) {
     console.error("❌ summarize error:", error);

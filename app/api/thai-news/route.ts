@@ -34,13 +34,43 @@ const THAI_NEWS_SOURCES = {
     }
   },
   manager: {
-    name: "ผู้จัดการออนไลน์", 
+    name: "ผู้จัดการออนไลน์",
     baseUrl: "https://mgronline.com",
     rssUrl: "https://mgronline.com/feed",
     selector: {
       title: "h1, .entry-title",
       content: ".entry-content, .content",
       image: ".featured-image img, img",
+    }
+  },
+  thairath: {
+    name: "ไทยรัฐ",
+    baseUrl: "https://www.thairath.co.th",
+    rssUrl: "https://www.thairath.co.th/rss/news.xml",
+    selector: {
+      title: "h1, .news-title",
+      content: ".news-content, article, p",
+      image: ".news-image img, img",
+    }
+  },
+  matichon: {
+    name: "มติชน",
+    baseUrl: "https://www.matichon.co.th",
+    rssUrl: "https://www.matichon.co.th/feed",
+    selector: {
+      title: "h1, .entry-title",
+      content: ".entry-content, .article-content",
+      image: ".featured-image img, img",
+    }
+  },
+  posttoday: {
+    name: "โพสต์ทูเดย์",
+    baseUrl: "https://www.posttoday.com",
+    rssUrl: "https://www.posttoday.com/rss/news.xml",
+    selector: {
+      title: "h1, .article-title",
+      content: ".article-content, .content",
+      image: ".article-image img, img",
     }
   }
 };

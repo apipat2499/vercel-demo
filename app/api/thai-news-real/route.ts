@@ -1,37 +1,37 @@
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
 
-// Real Thai news sources
+// Real Thai news sources with working RSS feeds
 const REAL_THAI_NEWS_SOURCES = [
   {
     name: "BBC Thai",
     url: "https://www.bbc.com/thai",
     rssUrl: "https://feeds.bbci.co.uk/thai/rss.xml",
-    selector: {
-      title: "h1, .story-headline",
-      content: ".story-body p",
-      image: ".story-image img"
-    }
+    enabled: true,
   },
   {
-    name: "Voice TV",
-    url: "https://www.voicetv.co.th",
-    baseUrl: "https://www.voicetv.co.th/read/",
-    selector: {
-      title: "h1.entry-title",
-      content: ".entry-content p",
-      image: ".featured-image img"
-    }
+    name: "ข่าวสด",
+    url: "https://www.khaosod.co.th",
+    rssUrl: "https://www.khaosod.co.th/feed",
+    enabled: true,
   },
   {
-    name: "Matichon",
-    url: "https://www.matichon.co.th",
-    baseUrl: "https://www.matichon.co.th/news/",
-    selector: {
-      title: "h1",
-      content: ".content-detail p",
-      image: ".feature-image img"
-    }
+    name: "ผู้จัดการออนไลน์",
+    url: "https://mgronline.com",
+    rssUrl: "https://mgronline.com/rss.xml",
+    enabled: true,
+  },
+  {
+    name: "ไทยพับลิก้า",
+    url: "https://thaipublica.org",
+    rssUrl: "https://thaipublica.org/feed/",
+    enabled: true,
+  },
+  {
+    name: "The Standard",
+    url: "https://thestandard.co",
+    rssUrl: "https://thestandard.co/feed/",
+    enabled: true,
   }
 ];
 
@@ -69,40 +69,85 @@ async function fetchRealNews(source: any, limit: number = 10) {
       let description = $item.find('description').text().trim();
       const pubDate = $item.find('pubDate').text().trim();
       
-      // ทำความสะอาด description
+      // ทำความสะอาด description อย่างละเอียด
       description = description
-        .replace(/<[^>]*>/g, '') // ลบ HTML tags
-        .replace(/&[^;]+;/g, ' ') // ลบ HTML entities
+        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // ลบ script tags
+        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '') // ลบ style tags
+        .replace(/<[^>]+>/g, '') // ลบ HTML tags ทั้งหมด
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/&[^;]+;/g, ' ') // ลบ HTML entities อื่นๆ
         .replace(/\s+/g, ' ') // ลบ whitespace เกิน
+        .replace(/\[…\]/g, '...') // แทนที่ […]
         .trim();
-      
+
       // ตัดให้เหมาะสมกับการแสดงผล
-      if (description.length > 200) {
-        description = description.substring(0, 200) + '...';
+      if (description.length > 250) {
+        description = description.substring(0, 250).trim() + '...';
+      }
+
+      // ถ้า description สั้นเกินไป หรือเป็นแค่ขยะ ให้ใช้ title แทน
+      if (description.length < 30 || description.match(/^[\s.…-]+$/)) {
+        description = title.length > 150 ? title.substring(0, 150) + '...' : title;
       }
       
-      // ถ้า description สั้นเกินไป ใช้ title แทน
-      if (description.length < 50) {
-        description = title.length > 100 ? title.substring(0, 100) + '...' : title;
-      }
-      
-      // หาภาพ
+      // หาภาพจากหลายแหล่ง
       let imageUrl = '';
+
+      // 1. จาก enclosure
       const enclosure = $item.find('enclosure[type*="image"]');
       if (enclosure.length) {
         imageUrl = enclosure.attr('url') || '';
-      } else {
+      }
+
+      // 2. จาก media:content
+      if (!imageUrl) {
         const mediaContent = $item.find('media\\:content, content');
         if (mediaContent.length) {
           imageUrl = mediaContent.attr('url') || '';
         }
       }
-      
-      // ถ้าไม่มีรูป ใช้รูป placeholder ที่เกี่ยวข้อง
+
+      // 3. จาก media:thumbnail
       if (!imageUrl) {
-        const topics = ['news', 'business', 'technology', 'politics', 'world', 'health', 'science'];
-        const randomTopic = topics[i % topics.length];
-        imageUrl = `https://images.unsplash.com/photo-${1500000000000 + (i * 1000000)}?w=500&h=300&fit=crop&auto=format&q=80`;
+        const mediaThumbnail = $item.find('media\\:thumbnail, thumbnail');
+        if (mediaThumbnail.length) {
+          imageUrl = mediaThumbnail.attr('url') || '';
+        }
+      }
+
+      // 4. หารูปใน description
+      if (!imageUrl && description) {
+        const imgMatch = description.match(/<img[^>]+src="([^">]+)"/);
+        if (imgMatch) {
+          imageUrl = imgMatch[1];
+        }
+      }
+
+      // 5. ตรวจสอบว่า URL รูปภาพถูกต้อง
+      if (imageUrl) {
+        try {
+          new URL(imageUrl);
+        } catch (e) {
+          console.log(`Invalid image URL: ${imageUrl}`);
+          imageUrl = ''; // ถ้า URL ไม่ถูกต้อง ให้ใช้ placeholder
+        }
+      }
+
+      // 6. ใช้ placeholder ที่สวยงามถ้าไม่มีรูป
+      if (!imageUrl) {
+        const placeholders = [
+          'https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=800&h=400&fit=crop&q=80', // News
+          'https://images.unsplash.com/photo-1495020689067-958852a7765e?w=800&h=400&fit=crop&q=80', // Breaking News
+          'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=800&h=400&fit=crop&q=80', // Thailand
+          'https://images.unsplash.com/photo-1523995462485-3d171b5c8fa9?w=800&h=400&fit=crop&q=80', // Media
+          'https://images.unsplash.com/photo-1586339949916-3e9457bef6d3?w=800&h=400&fit=crop&q=80', // Technology
+        ];
+        imageUrl = placeholders[i % placeholders.length];
       }
       
       if (title && link) {
