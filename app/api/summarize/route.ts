@@ -38,7 +38,33 @@ function simpleSummary(content: string, language: 'thai' | 'english'): string {
 // ฟังก์ชันดึงเนื้อหาจาก URL
 async function fetchContentFromUrl(url: string) {
   try {
-    // ใช้ allorigins สำหรับ bypass CORS
+    // ลองใช้ thai-news-real API ก่อน
+    try {
+      const response = await fetch('/api/thai-news-real', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ url }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.article?.content) {
+          return data.article.content;
+        }
+      }
+    } catch (error) {
+      console.log('Real Thai API failed, trying direct fetch');
+    }
+    
+    // ลองใช้ mock thai content
+    const mockContent = getMockThaiContent(url);
+    if (mockContent) {
+      return mockContent;
+    }
+    
+    // Fallback: ใช้ allorigins สำหรับ bypass CORS
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
     
     const response = await fetch(proxyUrl);
@@ -89,6 +115,25 @@ async function fetchContentFromUrl(url: string) {
     console.error('Error fetching content from URL:', error);
     return null;
   }
+}
+
+// ฟังก์ชันสำหรับ mock content
+function getMockThaiContent(url: string): string | null {
+  const mockData: { [key: string]: string } = {
+    "https://www.example.com/ai-technology-thailand-1": "การใช้ปัญญาประดิษฐ์ในการผลิตและบริการกำลังเติบโตอย่างรวดเร็วในประเทศไทย โดยเฉพาะในภาคการเงิน การผลิต และการค้าปลีก บริษัทชั้นนำหลายแห่งเริ่มนำ AI มาใช้เพื่อเพิ่มประสิทธิภาพและลดต้นทุนการดำเนินงาน ธนาคารต่างๆ ใช้ AI ในการวิเคราะห์ความเสี่ยงและการให้บริการลูกค้า ในขณะที่โรงงานผลิตนำ AI มาใช้ในการควบคุมคุณภาพและการบำรุงรักษาเครื่องจักร การพัฒนาทักษะด้าน AI ของบุคลากรไทยจึงเป็นสิ่งสำคัญเพื่อรองรับการเปลี่ยนแปลงนี้",
+    
+    "https://www.example.com/clean-energy-thailand-2": "รัฐบาลไทยเร่งขับเคลื่อนนโยบายพลังงานสะอาดเพื่อมุ่งสู่เป้าหมาย Net Zero ภายในปี 2065 โดยมีการลงทุนในโครงการพลังงานแสงอาทิตย์และพลังงานลมขนาดใหญ่ ตลอดจนส่งเสริมการใช้รถยนต์ไฟฟ้า โครงการโซลาร์ฟาร์มในภาคตะวันออกเฉียงเหนือจะเป็นหนึ่งในโครงการพลังงานสะอาดที่ใหญ่ที่สุดในภูมิภาคเอเชียตะวันออกเฉียงใต้ นอกจากนี้ยังมีแผนพัฒนาเทคโนโลยีการจัดเก็บพลังงานและระบบกริดอัจฉริยะเพื่อรองรับการใช้พลังงานหมุนเวียนในอนาคต",
+    
+    "https://www.example.com/tourism-recovery-thailand-3": "อุตสาหกรรมการท่องเที่ยวไทยแสดงสัญญาณฟื้นตัวที่แข็งแกร่ง โดยมีนักท่องเที่ยวต่างชาติเข้ามาท่องเที่ยวเพิ่มขึ้นกว่า 25% เมื่อเทียบกับปีที่แล้ว รัฐบาลมีแผนส่งเสริมการท่องเที่ยวเชิงวัฒนธรรมและความยั่งยืน การท่องเที่ยวเชิงอาหารและการท่องเที่ยวเชิงสุขภาพเป็นจุดขายสำคัญที่ดึงดูดนักท่องเที่ยวคุณภาพสูง โครงการ Soft Power ของไทยในการส่งเสริมวัฒนธรรมไทยผ่านภาพยนตร์ ดนตรี และอาหารไทยช่วยสร้างภาพลักษณ์ที่ดีและเพิ่มความน่าสนใจของประเทศไทยในสายตานักท่องเที่ยวทั่วโลก",
+
+    "https://www.example.com/digital-education-thailand-4": "ระบบการศึกษาไทยกำลังปรับตัวสู่ยุคดิจิทัล ด้วยการนำเทคโนโลยีใหม่ๆ เข้ามาใช้ในการเรียนการสอน โรงเรียนและมหาวิทยาลัยต่างๆ เริ่มใช้ระบบการเรียนรู้ออนไลน์ แอพพลิเคชั่นการศึกษา และ AI ในการปรับหลักสูตรให้เหมาะกับผู้เรียนแต่ละคน การพัฒนาทักษะดิจิทัลให้กับครูและนักเรียนจึงเป็นสิ่งจำเป็น เพื่อให้สามารถแข่งขันในตลาดงานยุคใหม่ได้",
+
+    "https://www.example.com/economy-growth-thailand-5": "เศรษฐกิจไทยในไตรมาสที่ 3 ของปี 2025 เติบโตอย่างต่อเนื่องจากการส่งออกที่ฟื้นตัว การบริโภคภายในประเทศที่เพิ่มขึ้น และการลงทุนจากต่างประเทศที่ขยายตัว ภาคอุตสาหกรรมยานยนต์และอิเล็กทรอนิกส์เป็นแรงขับเคลื่อนสำคัญ ขณะที่ภาคบริการและการท่องเที่ยวฟื้นตัวดี นักเศรษฐศาสตร์คาดการณ์ว่าจะมีการเติบโตต่อเนื่องในช่วงที่เหลือของปี",
+
+    "https://www.example.com/public-transport-bangkok-6": "โครงการรถไฟฟ้าสายใหม่ในกรุงเทพมหานครกำลังก่อสร้างเพื่อแก้ไขปัญหาการจราจรและลดมลพิษ รถไฟฟ้าสายสีชมพูและสีเหลืองจะเชื่อมต่อพื้นที่ชานเมืองเข้ากับใจกลางเมือง คาดว่าจะแล้วเสร็จภายในปี 2027 และจะช่วยลดเวลาเดินทางและการใช้รถยนต์ส่วนตัว ซึ่งจะช่วยลดมลพิษและปรับปรุงคุณภาพชีวิตของประชาชน"
+  };
+  
+  return mockData[url] || null;
 }
 
 export async function POST(req: Request) {

@@ -14,6 +14,12 @@ export default function Navbar() {
         <Link href="/favorites" className="hover:text-blue-500">
           ❤️ Favorites
         </Link>
+        <Link href="/settings" className="hover:text-blue-500">
+          ⚙️ Settings
+        </Link>
+        <Link href="/about" className="hover:text-blue-500">
+          ℹ️ About
+        </Link>
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="px-3 py-1 rounded-lg border hover:bg-gray-100 dark:hover:bg-gray-700"
