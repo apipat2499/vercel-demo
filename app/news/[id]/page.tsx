@@ -1,11 +1,18 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
-export default function NewsDetail({ params }: { params: Promise<{ id: string }> }) {
-  // ✅ unwrap params ก่อนใช้
-  const { id } = use(params);
+interface NewsDetailProps {
+  params: Promise<{ id: string }>;
+}
+
+export default function NewsDetail({ params }: NewsDetailProps) {
+  const [id, setId] = useState<string>("");
+  
+  useEffect(() => {
+    params.then(({ id }) => setId(id));
+  }, [params]);
 
   const [article, setArticle] = useState<any>(null);
   const [summary, setSummary] = useState<string>("");
@@ -13,14 +20,20 @@ export default function NewsDetail({ params }: { params: Promise<{ id: string }>
   useEffect(() => {
     if (!id) return;
 
-    const url = atob(decodeURIComponent(id));
-
-    fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`)
-      .then((res) => res.json())
-      .then((data) => {
+    const fetchArticle = async () => {
+      try {
+        const url = atob(decodeURIComponent(id));
+        
+        const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+        
         setArticle({ url, content: data.contents });
-      })
-      .catch((err) => console.error("❌ Error fetching article:", err));
+      } catch (err) {
+        console.error("❌ Error fetching article:", err);
+      }
+    };
+
+    fetchArticle();
   }, [id]);
 
   const summarizeWithAI = async () => {
