@@ -5,7 +5,6 @@ import NewsCard from "@/components/NewsCard";
 import NotificationProvider from "@/providers/NotificationProvider";
 
 const categories = ["general", "business", "technology", "sports", "health", "entertainment", "science"];
-const thaiSources = ["all", "thairath", "matichon", "khaosod", "posttoday"];
 
 export default function Home() {
   const [articles, setArticles] = useState<any[]>([]);
@@ -13,8 +12,6 @@ export default function Home() {
   const [category, setCategory] = useState("general");
   const [loading, setLoading] = useState(true);
   const [newsType, setNewsType] = useState<'international' | 'thai'>('thai');
-  const [thaiSource, setThaiSource] = useState("all");
-  const [useRealNews, setUseRealNews] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const articlesPerPage = 12;
 
@@ -24,8 +21,8 @@ export default function Home() {
       setCurrentPage(1); // รีเซ็ตหน้ากลับไปหน้า 1
       try {
         if (newsType === 'thai') {
-          const apiEndpoint = useRealNews ? '/api/thai-news-real' : '/api/thai-news-simple';
-          const res = await fetch(`${apiEndpoint}?limit=50`); // ดึงมากขึ้นเพื่อ pagination
+          // ใช้ข่าวจริงเท่านั้น
+          const res = await fetch('/api/thai-news-real?limit=50');
           const data = await res.json();
           setAllArticles(data.articles || []);
         } else {
@@ -42,7 +39,7 @@ export default function Home() {
       setLoading(false);
     }
     loadNews();
-  }, [category, newsType, thaiSource, useRealNews]);
+  }, [category, newsType]);
 
   // Update displayed articles based on current page
   useEffect(() => {
@@ -98,37 +95,6 @@ export default function Home() {
             </button>
           </div>
 
-          {/* Real/Mock Data Toggle for Thai News */}
-          {newsType === 'thai' && (
-            <div className="flex items-center justify-center gap-4 mb-8 p-6 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
-              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">แหล่งข้อมูล:</span>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setUseRealNews(true)}
-                  className={`px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
-                    useRealNews
-                      ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white shadow-lg scale-105"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  📰 ข่าวจริง
-                </button>
-                <button
-                  onClick={() => setUseRealNews(false)}
-                  className={`px-6 py-3 rounded-xl text-sm font-bold transition-all duration-300 ${
-                    !useRealNews
-                      ? "bg-gradient-to-r from-blue-600 to-cyan-600 text-white shadow-lg scale-105"
-                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
-                  }`}
-                >
-                  🧪 ข้อมูลทดสอบ
-                </button>
-              </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 max-w-xs">
-                {useRealNews ? "ดึงข่าวจาก BBC Thai และแหล่งอื่นๆ" : "ใช้ข้อมูลตัวอย่างสำหรับทดสอบ"}
-              </span>
-            </div>
-          )}
 
           {/* Categories for International News */}
           {newsType === 'international' && (
@@ -149,25 +115,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* Thai Sources for Mock Data */}
-          {newsType === 'thai' && !useRealNews && (
-            <div className="flex flex-wrap gap-3 mb-8 justify-center items-center">
-              <span className="text-sm font-bold text-gray-600 dark:text-gray-400">แหล่งข่าว:</span>
-              {thaiSources.map((source) => (
-                <button
-                  key={source}
-                  onClick={() => setThaiSource(source)}
-                  className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all duration-300 shadow-md hover:shadow-lg ${
-                    thaiSource === source
-                      ? "bg-gradient-to-r from-green-600 to-emerald-600 text-white scale-105"
-                      : "bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                  }`}
-                >
-                  {source === 'all' ? 'ทั้งหมด' : source}
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Loading State */}
           {loading ? (
@@ -181,7 +128,16 @@ export default function Home() {
           ) : articles.length === 0 ? (
             <div className="text-center mt-20 p-12 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm rounded-3xl">
               <div className="text-6xl mb-4">📰</div>
-              <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold">ไม่พบข่าวในหมวดหมู่นี้</p>
+              <p className="text-gray-600 dark:text-gray-400 text-xl font-semibold mb-4">ไม่พบข่าวในหมวดหมู่นี้</p>
+              {newsType === 'international' && (
+                <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    💡 <strong>หมายเหตุ:</strong> NewsAPI free tier ไม่รองรับ production domain
+                    <br />
+                    กรุณาลองใช้ <strong>"ข่าวไทย"</strong> แทน ซึ่งดึงข้อมูลจริงจาก BBC Thai และแหล่งอื่นๆ
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <>
